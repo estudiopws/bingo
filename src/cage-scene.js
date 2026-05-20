@@ -18,8 +18,7 @@ export async function createCageScene(container) {
   // Lazy-load WASM (fix #2)
   let RAPIER;
   try {
-    const module = await import('@dimforge/rapier3d-compat');
-    RAPIER = module.default;
+    RAPIER = await import('@dimforge/rapier3d-compat');
     await RAPIER.init();
   } catch (err) {
     console.error('Rapier WASM failed to load:', err);
