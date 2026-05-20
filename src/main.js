@@ -61,6 +61,7 @@ function createBoard(maxNumber) {
   const rowsPerCol = Math.ceil(maxNumber / cols);
   board.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
 
+
   for (let row = 0; row < rowsPerCol; row++) {
     for (let col = 0; col < cols; col++) {
       const number = col * rowsPerCol + row + 1;
