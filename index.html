@@ -10,149 +10,7 @@
 <link href="https://fonts.googleapis.com" rel="preconnect"/>
 <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
 <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:ital,wght@0,200..800;1,200..800&amp;family=Sora:wght@100..800&amp;display=swap" rel="stylesheet"/>
-<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-<script id="tailwind-config">
-  tailwind.config = {
-    darkMode: "class",
-    theme: {
-      extend: {
-        "colors": {
-                "on-secondary-fixed": "#2b1707",
-                "outline": "#717973",
-                "background": "#fbf9f1",
-                "surface-variant": "#e4e3db",
-                "on-primary-fixed": "#002114",
-                "outline-variant": "#c1c8c2",
-                "on-primary-container": "#86af99",
-                "on-primary": "#ffffff",
-                "surface-tint": "#3f6653",
-                "on-secondary-container": "#7a5d48",
-                "surface-bright": "#fbf9f1",
-                "on-background": "#1b1c17",
-                "primary-fixed": "#c1ecd4",
-                "primary": "#012d1d",
-                "surface-container-lowest": "#ffffff",
-                "secondary-fixed": "#ffdcc5",
-                "tertiary-container": "#2a4131",
-                "surface": "#fbf9f1",
-                "surface-container-highest": "#e4e3db",
-                "primary-fixed-dim": "#a5d0b9",
-                "secondary-fixed-dim": "#e4bfa6",
-                "surface-container-low": "#f5f4ec",
-                "on-error-container": "#93000a",
-                "on-surface": "#1b1c17",
-                "on-secondary-fixed-variant": "#5b412e",
-                "tertiary-fixed": "#cee9d3",
-                "on-tertiary": "#ffffff",
-                "on-tertiary-fixed": "#092012",
-                "on-tertiary-fixed-variant": "#354c3b",
-                "on-surface-variant": "#414844",
-                "surface-container-high": "#eae8e0",
-                "on-tertiary-container": "#93ad98",
-                "inverse-surface": "#30312c",
-                "inverse-primary": "#a5d0b9",
-                "secondary": "#755844",
-                "surface-container": "#f0eee6",
-                "primary-container": "#1b4332",
-                "error": "#ba1a1a",
-                "surface-dim": "#dcdad2",
-                "on-error": "#ffffff",
-                "secondary-container": "#ffd8be",
-                "error-container": "#ffdad6",
-                "tertiary-fixed-dim": "#b3cdb7",
-                "inverse-on-surface": "#f3f1e9",
-                "on-secondary": "#ffffff",
-                "tertiary": "#152b1c",
-                "on-primary-fixed-variant": "#274e3d"
-        },
-        "borderRadius": {
-                "DEFAULT": "0.25rem",
-                "lg": "0.5rem",
-                "xl": "0.75rem",
-                "full": "9999px"
-        },
-        "spacing": {
-                "sm": "12px",
-                "margin-mobile": "16px",
-                "gutter": "20px",
-                "base": "8px",
-                "margin-desktop": "32px",
-                "md": "24px",
-                "xs": "4px",
-                "xl": "64px",
-                "lg": "40px"
-        },
-        "fontFamily": {
-                "headline-lg-mobile": [
-                        "Sora"
-                ],
-                "headline-lg": [
-                        "Sora"
-                ],
-                "body-lg": [
-                        "Sora"
-                ],
-                "label-md": [
-                        "Sora"
-                ],
-                "headline-xl": [
-                        "Sora"
-                ],
-                "body-md": [
-                        "Sora"
-                ]
-        },
-        "fontSize": {
-                "headline-lg-mobile": [
-                        "28px",
-                        {
-                                "lineHeight": "36px",
-                                "fontWeight": "700"
-                        }
-                ],
-                "headline-lg": [
-                        "32px",
-                        {
-                                "lineHeight": "40px",
-                                "letterSpacing": "-0.01em",
-                                "fontWeight": "700"
-                        }
-                ],
-                "body-lg": [
-                        "20px",
-                        {
-                                "lineHeight": "30px",
-                                "fontWeight": "400"
-                        }
-                ],
-                "label-md": [
-                        "16px",
-                        {
-                                "lineHeight": "24px",
-                                "letterSpacing": "0.02em",
-                                "fontWeight": "600"
-                        }
-                ],
-                "headline-xl": [
-                        "40px",
-                        {
-                                "lineHeight": "48px",
-                                "letterSpacing": "-0.02em",
-                                "fontWeight": "700"
-                        }
-                ],
-                "body-md": [
-                        "18px",
-                        {
-                                "lineHeight": "28px",
-                                "fontWeight": "400"
-                        }
-                ]
-        }
-},
-    },
-  }
-</script>
+
 <style>
         .glass-panel {
             background: rgba(251, 249, 241, 0.8);
@@ -274,7 +132,7 @@
 <section class="w-full md:w-2/5 flex flex-col gap-4 md:gap-gutter min-w-0">
 <div class="glass-panel rounded-xl flex-grow relative overflow-hidden flex flex-col items-center justify-center min-h-[320px] md:min-h-[350px]">
 <div class="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-primary-container/5 via-background to-background pointer-events-none"></div>
-<div class="w-full h-full absolute inset-0 z-0" id="threejs-container"></div>
+<div class="w-full h-full absolute inset-0 z-0" id="threejs-container" aria-hidden="true"></div>
 <div class="relative z-10 mt-auto mb-6 md:mb-8 text-center bg-surface-container-high/90 backdrop-blur-md px-6 md:px-10 py-5 md:py-6 rounded-3xl border border-outline-variant shadow-lg">
 <div class="text-label-md font-label-md text-on-surface-variant tracking-[0.1em] mb-2 uppercase">ÚLTIMA BOLA</div>
 <div class="text-headline-xl font-headline-xl text-primary" id="last-ball-display">

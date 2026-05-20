@@ -1,5 +1,7 @@
+import './styles.css';
 import { createCageScene } from './cage-scene.js';
 import { createGameState, formatBingoCall, getBingoLetter, getMaxNumber, setMaxNumber } from './game-state.js';
+import { openSettingsModal, closeSettingsModal } from './modal.js';
 
 const board = document.getElementById('master-board');
 const display = document.getElementById('last-ball-display');
@@ -9,9 +11,6 @@ const undoButton = document.getElementById('undo-button');
 const newGameButton = document.getElementById('new-game-button');
 const threeContainer = document.getElementById('threejs-container');
 const footerSignoff = document.getElementById('footer-signoff');
-const infoModal = document.getElementById('info-modal');
-const infoModalTitle = document.getElementById('info-modal-title');
-const infoModalBody = document.getElementById('info-modal-body');
 const modalTriggers = Array.from(document.querySelectorAll('[data-modal-trigger]'));
 const modalCloseButtons = Array.from(document.querySelectorAll('[data-modal-close]'));
 
@@ -57,8 +56,6 @@ const modalContent = {
 function createBoard(maxNumber) {
   board.replaceChildren();
   const cols = Math.min(maxNumber, 15);
-
-  // Update grid columns
   board.style.gridTemplateColumns = `minmax(56px, 0.9fr) repeat(${cols}, 1fr)`;
 
   const rows = Math.ceil(maxNumber / cols);
@@ -90,7 +87,6 @@ function setDisplay(number) {
     display.textContent = '--';
     return;
   }
-
   display.textContent = formatBingoCall(number);
   display.classList.remove('draw-anim');
   void display.offsetWidth;
@@ -145,14 +141,11 @@ function mountApp() {
 
   function renderHistory() {
     const calledNumbers = game.getCalledNumbers().slice().reverse();
-
     if (calledNumbers.length === 0) {
       return `<div class="rounded-[28px] border border-dashed border-outline-variant bg-surface-container-low px-6 py-10 text-center text-on-surface-variant">
           Aun no se ha cantado ninguna bola.</div>`;
     }
-
     const pills = calledNumbers.map((n) => `<div class="history-pill">${formatBingoCall(n)}</div>`).join('');
-
     return `<div class="space-y-5">
         <div class="flex items-center justify-between gap-4 rounded-[28px] border border-outline-variant bg-surface-container-low px-5 py-4">
           <div>
@@ -188,38 +181,30 @@ function mountApp() {
     return modalContent[modalKey]?.body ?? '';
   }
 
-  function renderModal(modalKey) {
+  function closeModal() {
+    activeModalKey = null;
+    closeSettingsModal();
+  }
+
+  function openModal(modalKey, trigger) {
+    activeModalKey = modalKey;
     const config = modalContent[modalKey];
     if (!config) return;
-    infoModalTitle.textContent = config.title;
-    infoModalBody.innerHTML = getModalMarkup(modalKey);
+    openSettingsModal({ title: config.title, bodyHtml: getModalMarkup(modalKey), trigger });
 
     if (modalKey === 'ajustes') {
       document.getElementById('settings-save')?.addEventListener('click', handleSettingsSave);
     }
   }
 
-  function closeModal() {
-    activeModalKey = null;
-    infoModal.classList.remove('is-open');
-    infoModal.setAttribute('aria-hidden', 'true');
-    document.body.classList.remove('overflow-hidden');
-  }
-
-  function openModal(modalKey) {
-    activeModalKey = modalKey;
-    renderModal(modalKey);
-    infoModal.classList.add('is-open');
-    infoModal.setAttribute('aria-hidden', 'false');
-    document.body.classList.add('overflow-hidden');
-  }
-
   function refreshHistoryModal() {
-    if (activeModalKey === 'historial') renderModal(activeModalKey);
+    if (activeModalKey === 'historial') {
+      openModal(activeModalKey);
+    }
   }
 
   function handleModalTriggerClick(event) {
-    openModal(event.currentTarget.dataset.modalTrigger);
+    openModal(event.currentTarget.dataset.modalTrigger, event.currentTarget);
   }
 
   function handleModalCloseClick() {
@@ -235,23 +220,19 @@ function mountApp() {
     const val = parseInt(input?.value, 10);
     if (!val || val < 1 || val > 999) return;
     setMaxNumber(val);
-    // Clear current game state so it reloads fresh
     window.localStorage.removeItem('bingo-game-state');
     closeModal();
-    // Remount the app with new settings
     cleanup();
     unmountApp = mountApp();
   }
 
   function drawBall() {
     if (pendingReveal !== null) return;
-
     const number = game.draw();
     if (!number) return;
 
     drawButton.disabled = true;
     undoButton.disabled = true;
-
     cageScene.roll(3000);
 
     pendingReveal = setTimeout(() => {
@@ -279,12 +260,10 @@ function mountApp() {
 
   function startNewGame() {
     if (!window.confirm('Se borrara la partida actual. Quieres empezar una nueva partida?')) return;
-
     if (pendingReveal !== null) {
       clearTimeout(pendingReveal);
       pendingReveal = null;
     }
-
     const previousCalledNumbers = game.reset();
     resetBoardState(previousCalledNumbers);
     undoButton.disabled = false;
@@ -336,7 +315,6 @@ function mountApp() {
     cageScene.dispose();
     board.replaceChildren();
     setDisplay(null);
-    infoModalBody.replaceChildren();
   }
 
   return cleanup;

@@ -180,18 +180,40 @@ export function createCageScene(container) {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   }
 
-  function animate(timestamp) {
+  let rafId = null;
+
+  function startLoop() {
+    if (rafId !== null || disposed) return;
+    lastTimestamp = 0;
+    rafId = requestAnimationFrame(animateTracked);
+  }
+
+  function stopLoop() {
+    if (rafId !== null) {
+      cancelAnimationFrame(rafId);
+      rafId = null;
+    }
+  }
+
+  function handleVisibilityChange() {
+    if (document.hidden) {
+      stopLoop();
+    } else {
+      startLoop();
+    }
+  }
+
+  function animateTracked(timestamp) {
     if (disposed) return;
-    requestAnimationFrame(animate);
+    rafId = requestAnimationFrame(animateTracked);
 
     const rawDt = lastTimestamp > 0 ? timestamp - lastTimestamp : 16.67;
-    const dtMs = Math.min(rawDt, 50); // cap to avoid tunnelling
-    const dt = dtMs / 16.67; // normalised for cage rotation lerp
+    const dtMs = Math.min(rawDt, 50);
+    const dt = dtMs / 16.67;
     lastTimestamp = timestamp;
 
     const rolling = isRolling();
 
-    // Cage rotation — smooth acceleration/deceleration
     const targetX = rolling ? 0.02 : 0.002;
     const targetY = rolling ? 0.025 : 0.0025;
     const lerp = 0.04;
@@ -202,7 +224,6 @@ export function createCageScene(container) {
     cageGroup.rotation.y += cageAngVelY * dt;
     cageGroup.rotation.z = Math.sin(timestamp * 0.00025) * 0.06;
 
-    // Physics substep — use dtMs for real-time physics
     const substeps = dtMs > 30 ? 2 : 1;
     const subDt = dtMs / substeps;
     for (let s = 0; s < substeps; s++) {
@@ -216,13 +237,16 @@ export function createCageScene(container) {
   }
 
   window.addEventListener('resize', resize);
-  requestAnimationFrame(animate);
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+  rafId = requestAnimationFrame(animateTracked);
 
   return {
     roll,
     dispose() {
       disposed = true;
+      stopLoop();
       window.removeEventListener('resize', resize);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       renderer.dispose();
       container.removeChild(renderer.domElement);
     },
