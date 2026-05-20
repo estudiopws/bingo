@@ -1,23 +1,23 @@
-function createNumberPool() {
-  return Array.from({ length: 75 }, (_, index) => index + 1);
+function createNumberPool(maxNumber) {
+  return Array.from({ length: maxNumber }, (_, index) => index + 1);
 }
 
-function createInitialState() {
+function createInitialState(maxNumber) {
   return {
     calledNumbers: [],
-    availableNumbers: createNumberPool(),
+    availableNumbers: createNumberPool(maxNumber),
   };
 }
 
-function isValidCalledNumbers(calledNumbers) {
+function isValidCalledNumbers(calledNumbers, maxNumber) {
   return Array.isArray(calledNumbers)
-    && calledNumbers.length <= 75
+    && calledNumbers.length <= maxNumber
     && new Set(calledNumbers).size === calledNumbers.length
-    && calledNumbers.every((number) => Number.isInteger(number) && number >= 1 && number <= 75);
+    && calledNumbers.every((number) => Number.isInteger(number) && number >= 1 && number <= maxNumber);
 }
 
-function createStateFromCalledNumbers(calledNumbers) {
-  const availableNumberSet = new Set(createNumberPool());
+function createStateFromCalledNumbers(calledNumbers, maxNumber) {
+  const availableNumberSet = new Set(createNumberPool(maxNumber));
 
   for (const number of calledNumbers) {
     availableNumberSet.delete(number);
@@ -29,26 +29,39 @@ function createStateFromCalledNumbers(calledNumbers) {
   };
 }
 
-function loadState(storage, storageKey) {
+function loadState(storage, storageKey, maxNumber) {
   if (!storage) {
-    return createInitialState();
+    return createInitialState(maxNumber);
   }
 
   try {
     const rawState = storage.getItem(storageKey);
     if (!rawState) {
-      return createInitialState();
+      return createInitialState(maxNumber);
     }
 
     const parsedState = JSON.parse(rawState);
-    if (!isValidCalledNumbers(parsedState?.calledNumbers)) {
-      return createInitialState();
+    if (!isValidCalledNumbers(parsedState?.calledNumbers, maxNumber)) {
+      return createInitialState(maxNumber);
     }
 
-    return createStateFromCalledNumbers(parsedState.calledNumbers);
+    return createStateFromCalledNumbers(parsedState.calledNumbers, maxNumber);
   } catch {
-    return createInitialState();
+    return createInitialState(maxNumber);
   }
+}
+
+export function getMaxNumber(storage = localStorage) {
+  try {
+    const val = parseInt(storage.getItem('bingo-max-number'), 10);
+    return val > 0 ? val : 90;
+  } catch {
+    return 90;
+  }
+}
+
+export function setMaxNumber(value, storage = localStorage) {
+  storage.setItem('bingo-max-number', String(value));
 }
 
 export function getBingoLetter(number) {
@@ -56,15 +69,17 @@ export function getBingoLetter(number) {
   if (number <= 30) return 'I';
   if (number <= 45) return 'N';
   if (number <= 60) return 'G';
-  return 'O';
+  if (number <= 75) return 'O';
+  return '#';
 }
 
 export function formatBingoCall(number) {
-  return `${getBingoLetter(number)}-${number}`;
+  if (number <= 75) return `${getBingoLetter(number)}-${number}`;
+  return String(number);
 }
 
-export function createGameState({ random = Math.random, storage = null, storageKey = 'bingo-game-state' } = {}) {
-  const state = loadState(storage, storageKey);
+export function createGameState({ random = Math.random, storage = null, storageKey = 'bingo-game-state', maxNumber = 90 } = {}) {
+  const state = loadState(storage, storageKey, maxNumber);
 
   function persistState() {
     if (!storage) {
@@ -79,6 +94,8 @@ export function createGameState({ random = Math.random, storage = null, storageK
   }
 
   return {
+    maxNumber,
+
     draw() {
       if (state.availableNumbers.length === 0) {
         return null;
@@ -104,7 +121,7 @@ export function createGameState({ random = Math.random, storage = null, storageK
 
     reset() {
       const previousCalledNumbers = [...state.calledNumbers];
-      const initialState = createInitialState();
+      const initialState = createInitialState(maxNumber);
 
       state.calledNumbers.splice(0, state.calledNumbers.length, ...initialState.calledNumbers);
       state.availableNumbers.splice(0, state.availableNumbers.length, ...initialState.availableNumbers);
