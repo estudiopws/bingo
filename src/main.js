@@ -56,56 +56,32 @@ const modalContent = {
 function createBoard(maxNumber) {
   board.replaceChildren();
 
-  if (maxNumber <= 75) {
-    // 75-ball: 5 columns (B, I, N, G, O) with 15 numbers each
-    const cols = 5;
-    const rowsPerCol = 15;
-    board.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+  const isBingo75 = maxNumber === 75;
+  const cols = isBingo75 ? 5 : Math.ceil(maxNumber / 10);
+  const rowsPerCol = Math.ceil(maxNumber / cols);
+  board.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
 
-    // Header row: B-I-N-G-O
-    const letters = ['B', 'I', 'N', 'G', 'O'];
-    for (const letter of letters) {
+  if (isBingo75) {
+    for (const letter of ['B', 'I', 'N', 'G', 'O']) {
       const headerCell = document.createElement('div');
       headerCell.className = boardLetterClassName;
       headerCell.textContent = letter;
       board.appendChild(headerCell);
     }
+  }
 
-    // Number rows: each row has one number per column
-    for (let row = 0; row < rowsPerCol; row++) {
-      for (let col = 0; col < cols; col++) {
-        const number = col * rowsPerCol + row + 1;
-        if (number > maxNumber) {
-          board.appendChild(document.createElement('div'));
-          continue;
-        }
-        const cell = document.createElement('div');
-        cell.id = `ball-${number}`;
-        cell.className = baseCellClassName;
-        cell.textContent = number;
-        board.appendChild(cell);
+  for (let row = 0; row < rowsPerCol; row++) {
+    for (let col = 0; col < cols; col++) {
+      const number = col * rowsPerCol + row + 1;
+      if (number > maxNumber) {
+        board.appendChild(document.createElement('div'));
+        continue;
       }
-    }
-  } else {
-    // 90-ball: 9 columns of 10 numbers each (1-10, 11-20, ..., 81-90)
-    const cols = 9;
-    const rowsPerCol = Math.ceil(maxNumber / cols);
-    board.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
-
-    // Number rows
-    for (let row = 0; row < rowsPerCol; row++) {
-      for (let col = 0; col < cols; col++) {
-        const number = col * rowsPerCol + row + 1;
-        if (number > maxNumber) {
-          board.appendChild(document.createElement('div'));
-          continue;
-        }
-        const cell = document.createElement('div');
-        cell.id = `ball-${number}`;
-        cell.className = baseCellClassName;
-        cell.textContent = number;
-        board.appendChild(cell);
-      }
+      const cell = document.createElement('div');
+      cell.id = `ball-${number}`;
+      cell.className = baseCellClassName;
+      cell.textContent = number;
+      board.appendChild(cell);
     }
   }
 }
