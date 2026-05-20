@@ -55,29 +55,57 @@ const modalContent = {
 
 function createBoard(maxNumber) {
   board.replaceChildren();
-  const cols = Math.min(maxNumber, 15);
-  board.style.gridTemplateColumns = `minmax(56px, 0.9fr) repeat(${cols}, 1fr)`;
 
-  const rows = Math.ceil(maxNumber / cols);
-  for (let row = 0; row < rows; row++) {
-    const rowStart = row * cols + 1;
-    const letterCell = document.createElement('div');
-    letterCell.className = boardLetterClassName;
-    letterCell.textContent = maxNumber <= 75 ? getBingoLetter(rowStart) : String(rowStart);
-    board.appendChild(letterCell);
+  if (maxNumber <= 75) {
+    // 75-ball: 5 columns (B, I, N, G, O) with 15 numbers each
+    const cols = 5;
+    const rowsPerCol = 15;
+    board.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
 
-    for (let i = 0; i < cols; i++) {
-      const number = rowStart + i;
-      if (number > maxNumber) {
-        const empty = document.createElement('div');
-        board.appendChild(empty);
-        continue;
+    // Header row: B-I-N-G-O
+    const letters = ['B', 'I', 'N', 'G', 'O'];
+    for (const letter of letters) {
+      const headerCell = document.createElement('div');
+      headerCell.className = boardLetterClassName;
+      headerCell.textContent = letter;
+      board.appendChild(headerCell);
+    }
+
+    // Number rows: each row has one number per column
+    for (let row = 0; row < rowsPerCol; row++) {
+      for (let col = 0; col < cols; col++) {
+        const number = col * rowsPerCol + row + 1;
+        if (number > maxNumber) {
+          board.appendChild(document.createElement('div'));
+          continue;
+        }
+        const cell = document.createElement('div');
+        cell.id = `ball-${number}`;
+        cell.className = baseCellClassName;
+        cell.textContent = number;
+        board.appendChild(cell);
       }
-      const cell = document.createElement('div');
-      cell.id = `ball-${number}`;
-      cell.className = baseCellClassName;
-      cell.textContent = number;
-      board.appendChild(cell);
+    }
+  } else {
+    // 90-ball: 9 columns of 10 numbers each (1-10, 11-20, ..., 81-90)
+    const cols = 9;
+    const rowsPerCol = Math.ceil(maxNumber / cols);
+    board.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+
+    // Number rows
+    for (let row = 0; row < rowsPerCol; row++) {
+      for (let col = 0; col < cols; col++) {
+        const number = col * rowsPerCol + row + 1;
+        if (number > maxNumber) {
+          board.appendChild(document.createElement('div'));
+          continue;
+        }
+        const cell = document.createElement('div');
+        cell.id = `ball-${number}`;
+        cell.className = baseCellClassName;
+        cell.textContent = number;
+        board.appendChild(cell);
+      }
     }
   }
 }
