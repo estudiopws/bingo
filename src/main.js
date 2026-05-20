@@ -147,7 +147,11 @@ function setFooterYear() {
 function mountApp() {
   const maxNumber = getMaxNumber();
   const game = createGameState({ storage: window.localStorage, maxNumber });
-  const cageScene = createCageScene(threeContainer);
+  let cageScene = null;
+  const cageReady = createCageScene(threeContainer).then((s) => {
+    cageScene = s;
+    if (!s) threeContainer.style.display = 'none';
+  });
   let activeModalKey = null;
   let pendingReveal = null;
 
@@ -261,7 +265,7 @@ function mountApp() {
 
     drawButton.disabled = true;
     undoButton.disabled = true;
-    cageScene.roll(3000);
+    cageScene?.roll(3000);
 
     pendingReveal = setTimeout(() => {
       pendingReveal = null;
@@ -283,7 +287,7 @@ function mountApp() {
   }
 
   function rollCage() {
-    cageScene.roll(2000);
+    cageScene?.roll(2000);
   }
 
   function startNewGame() {
@@ -299,7 +303,7 @@ function mountApp() {
   }
 
   function handleBeforeUnload() {
-    cageScene.dispose();
+    cageScene?.dispose();
   }
 
   createBoard(maxNumber);
@@ -340,7 +344,7 @@ function mountApp() {
       closeButton.removeEventListener('click', handleModalCloseClick);
     }
 
-    cageScene.dispose();
+    cageScene?.dispose();
     board.replaceChildren();
     setDisplay(null);
   }

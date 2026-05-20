@@ -22,6 +22,7 @@
   },
   "homepage": "https://github.com/estudiopws/bingo#readme",
   "dependencies": {
+    "@dimforge/rapier3d-compat": "0.14.0",
     "three": "^0.184.0"
   },
   "devDependencies": {

@@ -1,26 +1,34 @@
 import * as THREE from 'three';
 
 const BALL_RADIUS = 0.18;
-const CAGE_INNER_RADIUS = 2.5;
-const CONTACT_DIST = BALL_RADIUS * 2;
-const GRAVITY = 9.8 * 0.001;          // scaled gravity per ms
-const WALL_RESTITUTION = 0.45;
-const BALL_RESTITUTION = 0.35;
-const LINEAR_DAMPING = 0.992;
-const MAX_BALLS = 50;                  // cap for performance
+const CAGE_RADIUS = 2.5;
+const MAX_BALLS = 40;
+const RESTITUTION = 0.4;
+const FIXED_TIMESTEP = 1 / 60;
+const MAX_STEPS_PER_FRAME = 3;
 
-function randomPointInSphere(radius) {
-  const theta = Math.random() * Math.PI * 2;
-  const phi = Math.acos(2 * Math.random() - 1);
-  const d = Math.cbrt(Math.random()) * radius;
-  return new THREE.Vector3(
-    d * Math.sin(phi) * Math.cos(theta),
-    d * Math.sin(phi) * Math.sin(theta),
-    d * Math.cos(phi),
-  );
-}
+// Hoisted reusable objects (fix #4)
+const _euler = new THREE.Euler();
+const _quat = new THREE.Quaternion();
 
-export function createCageScene(container) {
+export async function createCageScene(container) {
+  // Abort flag for race condition on remount (fix #7)
+  let aborted = false;
+
+  // Lazy-load WASM (fix #2)
+  let RAPIER;
+  try {
+    const module = await import('@dimforge/rapier3d-compat');
+    RAPIER = module.default;
+    await RAPIER.init();
+  } catch (err) {
+    console.error('Rapier WASM failed to load:', err);
+    return null; // fix #3
+  }
+
+  if (aborted) return null; // fix #7
+
+  // --- Three.js setup ---
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(46, container.clientWidth / container.clientHeight, 0.1, 100);
   const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
@@ -30,7 +38,6 @@ export function createCageScene(container) {
   container.appendChild(renderer.domElement);
 
   scene.fog = new THREE.Fog(0xfbf9f1, 8, 14);
-
   scene.add(new THREE.AmbientLight(0xffffff, 1.2));
 
   const keyLight = new THREE.PointLight(0x86af99, 18, 30, 2);
@@ -45,14 +52,13 @@ export function createCageScene(container) {
   scene.add(cageGroup);
 
   // Transparent shell
-  const shell = new THREE.Mesh(
+  cageGroup.add(new THREE.Mesh(
     new THREE.SphereGeometry(2.85, 24, 24),
     new THREE.MeshPhysicalMaterial({
       color: 0xffffff, roughness: 0.3, metalness: 0.15,
       transmission: 0.3, transparent: true, opacity: 0.18, thickness: 0.5,
     }),
-  );
-  cageGroup.add(shell);
+  ));
 
   // Wireframe cage
   cageGroup.add(new THREE.Mesh(
@@ -68,9 +74,30 @@ export function createCageScene(container) {
   axle.rotation.x = Math.PI / 2;
   cageGroup.add(axle);
 
-  // Balls — use lower-poly geometry for performance
+  camera.position.set(0, 0.4, 8.2);
+
+  // --- Rapier physics world ---
+  const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
+
+  // Cage body: kinematic
+  const cageBodyDesc = RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(0, 0, 0);
+  const cageBody = world.createRigidBody(cageBodyDesc);
+
+  // Fix #1: Trimesh collider from low-poly icosphere (~80 triangles)
+  const cageGeo = new THREE.IcosahedronGeometry(CAGE_RADIUS, 1); // 80 triangles
+  const posAttr = cageGeo.getAttribute('position');
+  const vertices = new Float32Array(posAttr.array);
+  const indices = new Uint32Array(cageGeo.getIndex().array);
+  cageGeo.dispose();
+
+  const trimeshDesc = RAPIER.ColliderDesc.trimesh(vertices, indices)
+    .setRestitution(RESTITUTION);
+  world.createCollider(trimeshDesc, cageBody);
+
+  // Ball meshes and bodies
   const ballGeometry = new THREE.SphereGeometry(BALL_RADIUS, 12, 12);
-  const balls = [];
+  const ballMeshes = [];
+  const ballBodies = [];
 
   for (let i = 0; i < MAX_BALLS; i++) {
     const hue = 0.38 + (i % 15) / 15 * 0.04;
@@ -78,29 +105,49 @@ export function createCageScene(container) {
       color: new THREE.Color().setHSL(hue, 0.28, 0.66),
       roughness: 0.35, metalness: 0.08,
     });
-    const ball = new THREE.Mesh(ballGeometry, mat);
-    ball.position.copy(randomPointInSphere(2.0));
-    ball.userData.velocity = new THREE.Vector3(
-      (Math.random() - 0.5) * 0.005,
-      -Math.random() * 0.01,
-      (Math.random() - 0.5) * 0.005,
-    );
-    scene.add(ball);
-    balls.push(ball);
+    const mesh = new THREE.Mesh(ballGeometry, mat);
+    scene.add(mesh);
+    ballMeshes.push(mesh);
+
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.acos(2 * Math.random() - 1);
+    const d = Math.cbrt(Math.random()) * (CAGE_RADIUS - BALL_RADIUS * 2);
+    const x = d * Math.sin(phi) * Math.cos(theta);
+    const y = d * Math.sin(phi) * Math.sin(theta);
+    const z = d * Math.cos(phi);
+
+    // Fix #8: reduced damping
+    const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
+      .setTranslation(x, y, z)
+      .setLinearDamping(0.05)
+      .setAngularDamping(0.1)
+      .setCcdEnabled(true);
+    const body = world.createRigidBody(bodyDesc);
+
+    const colliderDesc = RAPIER.ColliderDesc.ball(BALL_RADIUS)
+      .setRestitution(RESTITUTION)
+      .setDensity(1.0);
+    world.createCollider(colliderDesc, body);
+
+    ballBodies.push(body);
   }
 
-  camera.position.set(0, 0.4, 8.2);
-
-  // Animation state
-  let cageAngVelX = 0.002;
-  let cageAngVelY = 0.0025;
-  let rollingUntil = 0;
+  // --- Animation state ---
   let disposed = false;
+  let rafId = null;
   let lastTimestamp = 0;
+  let accumulator = 0; // fix #5
+  let cageAngleX = 0;
+  let cageAngleY = 0;
+  let cageAngVelX = 0.12; // rad/s idle
+  let cageAngVelY = 0.15; // rad/s idle
+  let rollingUntil = 0;
 
-  const _delta = new THREE.Vector3();
-  const _normal = new THREE.Vector3();
-  const _tangent = new THREE.Vector3();
+  // Fix #9: ~40 RPM = ~4.2 rad/s
+  const ROLLING_VEL_X = 4.2;
+  const ROLLING_VEL_Y = 4.2;
+  const IDLE_VEL_X = 0.12;
+  const IDLE_VEL_Y = 0.15;
 
   function roll(duration = 3000) {
     rollingUntil = performance.now() + duration;
@@ -110,82 +157,65 @@ export function createCageScene(container) {
     return performance.now() < rollingUntil;
   }
 
-  function updateBall(ball, dtMs, cageSpinRate, rolling) {
-    const vel = ball.userData.velocity;
-    const pos = ball.position;
+  // --- Animation loop ---
+  function animate(timestamp) {
+    if (disposed) return;
+    rafId = requestAnimationFrame(animate);
 
-    // Gravity in world-space Y
-    vel.y -= GRAVITY * dtMs;
+    // Fix #9: use real seconds
+    const rawDt = lastTimestamp > 0 ? (timestamp - lastTimestamp) / 1000 : FIXED_TIMESTEP;
+    const dt = Math.min(rawDt, 0.1);
+    lastTimestamp = timestamp;
 
-    // Linear damping
-    const damp = Math.pow(LINEAR_DAMPING, dtMs);
-    vel.multiplyScalar(damp);
+    const rolling = isRolling();
 
-    // Cage-driven tangential force when spinning
-    if (cageSpinRate > 0.002) {
-      _tangent.set(-pos.z, 0, pos.x).normalize();
-      const force = cageSpinRate * 0.35 * dtMs;
-      vel.addScaledVector(_tangent, force);
-      // Lift to counteract gravity partially during roll
-      if (rolling) vel.y += cageSpinRate * 0.15 * dtMs;
+    // Cage rotation speed (lerp in seconds)
+    const targetX = rolling ? ROLLING_VEL_X : IDLE_VEL_X;
+    const targetY = rolling ? ROLLING_VEL_Y : IDLE_VEL_Y;
+    const lerp = 1 - Math.exp(-2.5 * dt);
+    cageAngVelX += (targetX - cageAngVelX) * lerp;
+    cageAngVelY += (targetY - cageAngVelY) * lerp;
+
+    cageAngleX += cageAngVelX * dt;
+    cageAngleY += cageAngVelY * dt;
+
+    // Update visual cage group
+    cageGroup.rotation.x = cageAngleX;
+    cageGroup.rotation.y = cageAngleY;
+    cageGroup.rotation.z = Math.sin(timestamp * 0.00025) * 0.06;
+
+    // Update kinematic cage body rotation (fix #4: reuse hoisted objects)
+    _euler.set(cageAngleX, cageAngleY, Math.sin(timestamp * 0.00025) * 0.06);
+    _quat.setFromEuler(_euler);
+    cageBody.setNextKinematicRotation({ x: _quat.x, y: _quat.y, z: _quat.z, w: _quat.w });
+
+    // Fix #5: fixed timestep accumulator
+    accumulator += dt;
+    let steps = 0;
+    while (accumulator >= FIXED_TIMESTEP && steps < MAX_STEPS_PER_FRAME) {
+      world.step();
+      accumulator -= FIXED_TIMESTEP;
+      steps++;
+    }
+    if (accumulator >= FIXED_TIMESTEP) accumulator = 0; // cap overflow
+
+    // Sync meshes from physics bodies
+    for (let i = 0; i < ballBodies.length; i++) {
+      const pos = ballBodies[i].translation();
+      const rot = ballBodies[i].rotation();
+      ballMeshes[i].position.set(pos.x, pos.y, pos.z);
+      ballMeshes[i].quaternion.set(rot.x, rot.y, rot.z, rot.w);
     }
 
-    // Integrate
-    pos.x += vel.x * dtMs;
-    pos.y += vel.y * dtMs;
-    pos.z += vel.z * dtMs;
-
-    // Cage wall constraint
-    const r = pos.length();
-    if (r > CAGE_INNER_RADIUS) {
-      _normal.copy(pos).divideScalar(r);
-      const vn = vel.dot(_normal);
-      if (vn > 0) {
-        vel.addScaledVector(_normal, -vn * (1 + WALL_RESTITUTION));
-      }
-      pos.copy(_normal).multiplyScalar(CAGE_INNER_RADIUS);
-    }
+    renderer.render(scene, camera);
   }
 
-  function resolveCollisions() {
-    for (let i = 0; i < balls.length; i++) {
-      for (let j = i + 1; j < balls.length; j++) {
-        _delta.subVectors(balls[j].position, balls[i].position);
-        const dist = _delta.length();
-        if (dist < 0.0001 || dist >= CONTACT_DIST) continue;
-
-        const overlap = CONTACT_DIST - dist;
-        _normal.copy(_delta).divideScalar(dist);
-
-        // Separate
-        balls[i].position.addScaledVector(_normal, -overlap * 0.5);
-        balls[j].position.addScaledVector(_normal, overlap * 0.5);
-
-        // Impulse
-        const vi = balls[i].userData.velocity.dot(_normal);
-        const vj = balls[j].userData.velocity.dot(_normal);
-        if (vi - vj > 0) {
-          const impulse = (vi - vj) * (1 + BALL_RESTITUTION) * 0.5;
-          balls[i].userData.velocity.addScaledVector(_normal, -impulse);
-          balls[j].userData.velocity.addScaledVector(_normal, impulse);
-        }
-      }
-    }
-  }
-
-  function resize() {
-    camera.aspect = container.clientWidth / container.clientHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(container.clientWidth, container.clientHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  }
-
-  let rafId = null;
-
+  // --- Visibility pause ---
   function startLoop() {
     if (rafId !== null || disposed) return;
     lastTimestamp = 0;
-    rafId = requestAnimationFrame(animateTracked);
+    accumulator = 0;
+    rafId = requestAnimationFrame(animate);
   }
 
   function stopLoop() {
@@ -196,59 +226,42 @@ export function createCageScene(container) {
   }
 
   function handleVisibilityChange() {
-    if (document.hidden) {
-      stopLoop();
-    } else {
-      startLoop();
-    }
+    if (document.hidden) stopLoop();
+    else startLoop();
   }
 
-  function animateTracked(timestamp) {
-    if (disposed) return;
-    rafId = requestAnimationFrame(animateTracked);
-
-    const rawDt = lastTimestamp > 0 ? timestamp - lastTimestamp : 16.67;
-    const dtMs = Math.min(rawDt, 50);
-    const dt = dtMs / 16.67;
-    lastTimestamp = timestamp;
-
-    const rolling = isRolling();
-
-    const targetX = rolling ? 0.02 : 0.002;
-    const targetY = rolling ? 0.025 : 0.0025;
-    const lerp = 0.04;
-    cageAngVelX += (targetX - cageAngVelX) * lerp * dt;
-    cageAngVelY += (targetY - cageAngVelY) * lerp * dt;
-
-    cageGroup.rotation.x += cageAngVelX * dt;
-    cageGroup.rotation.y += cageAngVelY * dt;
-    cageGroup.rotation.z = Math.sin(timestamp * 0.00025) * 0.06;
-
-    const substeps = dtMs > 30 ? 2 : 1;
-    const subDt = dtMs / substeps;
-    for (let s = 0; s < substeps; s++) {
-      for (const ball of balls) {
-        updateBall(ball, subDt, cageAngVelY, rolling);
-      }
-      resolveCollisions();
-    }
-
-    renderer.render(scene, camera);
+  function resize() {
+    camera.aspect = container.clientWidth / container.clientHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   }
 
   window.addEventListener('resize', resize);
   document.addEventListener('visibilitychange', handleVisibilityChange);
-  rafId = requestAnimationFrame(animateTracked);
+  rafId = requestAnimationFrame(animate);
 
   return {
     roll,
     dispose() {
       disposed = true;
+      aborted = true; // fix #7
       stopLoop();
       window.removeEventListener('resize', resize);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+
+      // Fix #6: dispose all Three.js resources
+      scene.traverse((obj) => {
+        if (obj.geometry) obj.geometry.dispose();
+        if (obj.material) {
+          if (Array.isArray(obj.material)) obj.material.forEach((m) => m.dispose());
+          else obj.material.dispose();
+        }
+      });
       renderer.dispose();
-      container.removeChild(renderer.domElement);
+      renderer.domElement.remove();
+
+      world.free();
     },
   };
 }
