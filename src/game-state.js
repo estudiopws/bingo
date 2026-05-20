@@ -74,7 +74,6 @@ export function getBingoLetter(number) {
 }
 
 export function formatBingoCall(number) {
-  if (number <= 75) return `${getBingoLetter(number)}-${number}`;
   return String(number);
 }
 

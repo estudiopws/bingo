@@ -61,14 +61,6 @@ function createBoard(maxNumber) {
   const rowsPerCol = Math.ceil(maxNumber / cols);
   board.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
 
-  if (isBingo75) {
-    for (const letter of ['B', 'I', 'N', 'G', 'O']) {
-      const headerCell = document.createElement('div');
-      headerCell.className = boardLetterClassName;
-      headerCell.textContent = letter;
-      board.appendChild(headerCell);
-    }
-  }
 
   for (let row = 0; row < rowsPerCol; row++) {
     for (let col = 0; col < cols; col++) {
