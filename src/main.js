@@ -1,5 +1,5 @@
 import { createCageScene } from './cage-scene.js';
-import { createGameState, formatBingoCall, getBingoLetter } from './game-state.js';
+import { createGameState, formatBingoCall, getBingoLetter, getMaxNumber, setMaxNumber } from './game-state.js';
 
 const board = document.getElementById('master-board');
 const display = document.getElementById('last-ball-display');
@@ -20,14 +20,12 @@ const activeCellClassName = 'flex items-center justify-center rounded-lg aspect-
 const boardLetterClassName = 'bingo-grid__letter';
 
 const modalContent = {
-  historial: {
-    title: 'Historial',
-  },
+  historial: { title: 'Historial' },
   reglas: {
     title: 'Reglas',
     body: `
       <div class="space-y-5 text-body-md text-on-surface">
-        <p>El operador saca una bola a la vez y anuncia la letra con el numero. Cada extraccion queda registrada en el tablero y en el historial.</p>
+        <p>El operador saca una bola a la vez y anuncia el numero. Cada extraccion queda registrada en el tablero y en el historial.</p>
         <div class="grid gap-4 md:grid-cols-3">
           <article class="rounded-3xl border border-outline-variant bg-surface-container-low p-5">
             <p class="text-label-md font-label-md uppercase tracking-[0.18em] text-on-surface-variant">1. Inicio</p>
@@ -35,7 +33,7 @@ const modalContent = {
           </article>
           <article class="rounded-3xl border border-outline-variant bg-surface-container-low p-5">
             <p class="text-label-md font-label-md uppercase tracking-[0.18em] text-on-surface-variant">2. Seguimiento</p>
-            <p class="mt-3">Las letras <strong>B-I-N-G-O</strong> identifican cada bloque de 15 numeros para ubicar rapido la bola correcta y anunciarla como llamada completa, por ejemplo <strong>G-52</strong>. El tablero principal resalta la bola mas reciente y el historial conserva la secuencia completa de llamadas.</p>
+            <p class="mt-3">El tablero principal resalta la bola mas reciente y el historial conserva la secuencia completa de llamadas.</p>
           </article>
           <article class="rounded-3xl border border-outline-variant bg-surface-container-low p-5">
             <p class="text-label-md font-label-md uppercase tracking-[0.18em] text-on-surface-variant">3. Correcciones</p>
@@ -49,35 +47,35 @@ const modalContent = {
     title: 'Probabilidades',
     body: `
       <div class="space-y-5 text-body-md text-on-surface">
-        <p>Cada bola restante tiene exactamente la misma probabilidad de salir en la siguiente extraccion. El sistema elimina numeros repetidos y mantiene una bolsa uniforme de 75 opciones iniciales.</p>
-        <div class="grid gap-4 md:grid-cols-2">
-          <article class="rounded-3xl border border-outline-variant bg-surface-container-low p-5">
-            <p class="text-label-md font-label-md uppercase tracking-[0.18em] text-on-surface-variant">Al comenzar</p>
-            <p class="mt-3 text-headline-lg font-headline-lg text-primary">1 de 75</p>
-            <p class="mt-2 text-on-surface-variant">Cada numero tiene una probabilidad de $1/75 \approx 1.33\%$.</p>
-          </article>
-          <article class="rounded-3xl border border-outline-variant bg-surface-container-low p-5">
-            <p class="text-label-md font-label-md uppercase tracking-[0.18em] text-on-surface-variant">Despues de 20 bolas</p>
-            <p class="mt-3 text-headline-lg font-headline-lg text-primary">1 de 55</p>
-            <p class="mt-2 text-on-surface-variant">Cada numero pendiente pasa a una probabilidad de $1/55 \approx 1.82\%$.</p>
-          </article>
-        </div>
-        <p class="text-on-surface-variant">La chance de que salga una letra depende de cuantas bolas queden disponibles en su rango: B, I, N, G u O.</p>
+        <p>Cada bola restante tiene exactamente la misma probabilidad de salir en la siguiente extraccion.</p>
       </div>
     `,
   },
+  ajustes: { title: 'Ajustes' },
 };
 
-function createBoard() {
+function createBoard(maxNumber) {
   board.replaceChildren();
+  const cols = Math.min(maxNumber, 15);
 
-  for (let rowStart = 1; rowStart <= 75; rowStart += 15) {
+  // Update grid columns
+  board.style.gridTemplateColumns = `minmax(56px, 0.9fr) repeat(${cols}, 1fr)`;
+
+  const rows = Math.ceil(maxNumber / cols);
+  for (let row = 0; row < rows; row++) {
+    const rowStart = row * cols + 1;
     const letterCell = document.createElement('div');
     letterCell.className = boardLetterClassName;
-    letterCell.textContent = getBingoLetter(rowStart);
+    letterCell.textContent = maxNumber <= 75 ? getBingoLetter(rowStart) : String(rowStart);
     board.appendChild(letterCell);
 
-    for (let number = rowStart; number < rowStart + 15; number += 1) {
+    for (let i = 0; i < cols; i++) {
+      const number = rowStart + i;
+      if (number > maxNumber) {
+        const empty = document.createElement('div');
+        board.appendChild(empty);
+        continue;
+      }
       const cell = document.createElement('div');
       cell.id = `ball-${number}`;
       cell.className = baseCellClassName;
@@ -101,10 +99,7 @@ function setDisplay(number) {
 
 function setCellState(number, isActive) {
   const cell = document.getElementById(`ball-${number}`);
-  if (!cell) {
-    return;
-  }
-
+  if (!cell) return;
   cell.className = isActive ? activeCellClassName : baseCellClassName;
 }
 
@@ -126,7 +121,8 @@ function setFooterYear() {
 }
 
 function mountApp() {
-  const game = createGameState({ storage: window.localStorage });
+  const maxNumber = getMaxNumber();
+  const game = createGameState({ storage: window.localStorage, maxNumber });
   const cageScene = createCageScene(threeContainer);
   let activeModalKey = null;
   let pendingReveal = null;
@@ -135,7 +131,6 @@ function mountApp() {
     for (const number of game.getCalledNumbers()) {
       setCellState(number, true);
     }
-
     setDisplay(game.getLastCalled());
     drawButton.disabled = !game.hasRemainingNumbers();
   }
@@ -144,7 +139,6 @@ function mountApp() {
     for (const number of numbers) {
       setCellState(number, false);
     }
-
     setDisplay(null);
     drawButton.disabled = false;
   }
@@ -153,19 +147,13 @@ function mountApp() {
     const calledNumbers = game.getCalledNumbers().slice().reverse();
 
     if (calledNumbers.length === 0) {
-      return `
-        <div class="rounded-[28px] border border-dashed border-outline-variant bg-surface-container-low px-6 py-10 text-center text-on-surface-variant">
-          Aun no se ha cantado ninguna bola. El historial aparecera aqui despues de la primera extraccion.
-        </div>
-      `;
+      return `<div class="rounded-[28px] border border-dashed border-outline-variant bg-surface-container-low px-6 py-10 text-center text-on-surface-variant">
+          Aun no se ha cantado ninguna bola.</div>`;
     }
 
-    const pills = calledNumbers
-      .map((number) => `<div class="history-pill">${formatBingoCall(number)}</div>`)
-      .join('');
+    const pills = calledNumbers.map((n) => `<div class="history-pill">${formatBingoCall(n)}</div>`).join('');
 
-    return `
-      <div class="space-y-5">
+    return `<div class="space-y-5">
         <div class="flex items-center justify-between gap-4 rounded-[28px] border border-outline-variant bg-surface-container-low px-5 py-4">
           <div>
             <p class="text-label-md font-label-md uppercase tracking-[0.18em] text-on-surface-variant">Ultima llamada</p>
@@ -177,26 +165,38 @@ function mountApp() {
           </div>
         </div>
         <div class="history-list">${pills}</div>
-      </div>
-    `;
+      </div>`;
+  }
+
+  function renderSettings() {
+    return `<div class="space-y-5 text-body-md text-on-surface">
+      <label class="block">
+        <span class="text-label-md font-label-md uppercase tracking-[0.18em] text-on-surface-variant">Cantidad de bolas</span>
+        <input id="settings-max-number" type="number" min="1" max="999" value="${maxNumber}"
+          class="mt-2 block w-full rounded-xl border border-outline-variant bg-surface-container-low px-4 py-3 text-headline-lg font-headline-lg text-primary focus:outline-none focus:ring-2 focus:ring-primary"/>
+      </label>
+      <button id="settings-save" type="button"
+        class="w-full py-4 rounded-xl bg-primary text-on-primary font-label-md text-label-md uppercase tracking-wider">
+        GUARDAR Y REINICIAR PARTIDA
+      </button>
+    </div>`;
   }
 
   function getModalMarkup(modalKey) {
-    if (modalKey === 'historial') {
-      return renderHistory();
-    }
-
+    if (modalKey === 'historial') return renderHistory();
+    if (modalKey === 'ajustes') return renderSettings();
     return modalContent[modalKey]?.body ?? '';
   }
 
   function renderModal(modalKey) {
     const config = modalContent[modalKey];
-    if (!config) {
-      return;
-    }
-
+    if (!config) return;
     infoModalTitle.textContent = config.title;
     infoModalBody.innerHTML = getModalMarkup(modalKey);
+
+    if (modalKey === 'ajustes') {
+      document.getElementById('settings-save')?.addEventListener('click', handleSettingsSave);
+    }
   }
 
   function closeModal() {
@@ -215,14 +215,11 @@ function mountApp() {
   }
 
   function refreshHistoryModal() {
-    if (activeModalKey === 'historial') {
-      renderModal(activeModalKey);
-    }
+    if (activeModalKey === 'historial') renderModal(activeModalKey);
   }
 
   function handleModalTriggerClick(event) {
-    const modalKey = event.currentTarget.dataset.modalTrigger;
-    openModal(modalKey);
+    openModal(event.currentTarget.dataset.modalTrigger);
   }
 
   function handleModalCloseClick() {
@@ -230,29 +227,33 @@ function mountApp() {
   }
 
   function handleWindowKeydown(event) {
-    if (event.key === 'Escape' && activeModalKey) {
-      closeModal();
-    }
+    if (event.key === 'Escape' && activeModalKey) closeModal();
+  }
+
+  function handleSettingsSave() {
+    const input = document.getElementById('settings-max-number');
+    const val = parseInt(input?.value, 10);
+    if (!val || val < 1 || val > 999) return;
+    setMaxNumber(val);
+    // Clear current game state so it reloads fresh
+    window.localStorage.removeItem('bingo-game-state');
+    closeModal();
+    // Remount the app with new settings
+    cleanup();
+    unmountApp = mountApp();
   }
 
   function drawBall() {
-    // Ignore clicks while a roll and reveal are already in progress
-    if (pendingReveal !== null) {
-      return;
-    }
+    if (pendingReveal !== null) return;
 
     const number = game.draw();
-    if (!number) {
-      return;
-    }
+    if (!number) return;
 
-    // Lock controls for the duration of the roll
     drawButton.disabled = true;
     undoButton.disabled = true;
 
     cageScene.roll(3000);
 
-    // Reveal number after the cage animation completes
     pendingReveal = setTimeout(() => {
       pendingReveal = null;
       setCellState(number, true);
@@ -265,10 +266,7 @@ function mountApp() {
 
   function undoLast() {
     const undoneNumber = game.undo();
-    if (!undoneNumber) {
-      return;
-    }
-
+    if (!undoneNumber) return;
     setCellState(undoneNumber, false);
     setDisplay(game.getLastCalled());
     drawButton.disabled = false;
@@ -280,9 +278,7 @@ function mountApp() {
   }
 
   function startNewGame() {
-    if (!window.confirm('Se borrara la partida actual y el historial guardado. Quieres empezar una nueva partida?')) {
-      return;
-    }
+    if (!window.confirm('Se borrara la partida actual. Quieres empezar una nueva partida?')) return;
 
     if (pendingReveal !== null) {
       clearTimeout(pendingReveal);
@@ -299,7 +295,7 @@ function mountApp() {
     cageScene.dispose();
   }
 
-  createBoard();
+  createBoard(maxNumber);
   hydrateBoardState();
   setFooterYear();
 
@@ -313,17 +309,15 @@ function mountApp() {
   for (const trigger of modalTriggers) {
     trigger.addEventListener('click', handleModalTriggerClick);
   }
-
   for (const closeButton of modalCloseButtons) {
     closeButton.addEventListener('click', handleModalCloseClick);
   }
 
-  return () => {
+  function cleanup() {
     if (pendingReveal !== null) {
       clearTimeout(pendingReveal);
       pendingReveal = null;
     }
-
     closeModal();
     drawButton.removeEventListener('click', drawBall);
     rollButton.removeEventListener('click', rollCage);
@@ -335,7 +329,6 @@ function mountApp() {
     for (const trigger of modalTriggers) {
       trigger.removeEventListener('click', handleModalTriggerClick);
     }
-
     for (const closeButton of modalCloseButtons) {
       closeButton.removeEventListener('click', handleModalCloseClick);
     }
@@ -344,7 +337,9 @@ function mountApp() {
     board.replaceChildren();
     setDisplay(null);
     infoModalBody.replaceChildren();
-  };
+  }
+
+  return cleanup;
 }
 
 let unmountApp = mountApp();

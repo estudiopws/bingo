@@ -1,22 +1,22 @@
 import * as THREE from 'three';
 
-// ── Physics constants ──────────────────────────────────────────────────────
-const BALL_RADIUS = 0.19;
-const CAGE_INNER_RADIUS = 2.58;      // max ball-centre distance from cage origin
-const CONTACT_DIST = BALL_RADIUS * 2; // centre-to-centre threshold for ball collision
-const GRAVITY = 0.0015;              // downward accel per normalised frame (16.67 ms)
-const WALL_RESTITUTION = 0.72;       // energy fraction kept on cage-wall bounce
-const BALL_RESTITUTION = 0.55;       // energy fraction kept on ball-to-ball bounce
+const BALL_RADIUS = 0.18;
+const CAGE_INNER_RADIUS = 2.5;
+const CONTACT_DIST = BALL_RADIUS * 2;
+const GRAVITY = 9.8 * 0.001;          // scaled gravity per ms
+const WALL_RESTITUTION = 0.45;
+const BALL_RESTITUTION = 0.35;
+const LINEAR_DAMPING = 0.992;
+const MAX_BALLS = 50;                  // cap for performance
 
 function randomPointInSphere(radius) {
   const theta = Math.random() * Math.PI * 2;
   const phi = Math.acos(2 * Math.random() - 1);
-  const distance = Math.cbrt(Math.random()) * radius;
-
+  const d = Math.cbrt(Math.random()) * radius;
   return new THREE.Vector3(
-    distance * Math.sin(phi) * Math.cos(theta),
-    distance * Math.sin(phi) * Math.sin(theta),
-    distance * Math.cos(phi),
+    d * Math.sin(phi) * Math.cos(theta),
+    d * Math.sin(phi) * Math.sin(theta),
+    d * Math.cos(phi),
   );
 }
 
@@ -31,8 +31,7 @@ export function createCageScene(container) {
 
   scene.fog = new THREE.Fog(0xfbf9f1, 8, 14);
 
-  const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
-  scene.add(ambientLight);
+  scene.add(new THREE.AmbientLight(0xffffff, 1.2));
 
   const keyLight = new THREE.PointLight(0x86af99, 18, 30, 2);
   keyLight.position.set(3.5, 3.2, 5.5);
@@ -45,58 +44,46 @@ export function createCageScene(container) {
   const cageGroup = new THREE.Group();
   scene.add(cageGroup);
 
-  const shellGeometry = new THREE.SphereGeometry(2.95, 28, 28);
-  const shellMaterial = new THREE.MeshPhysicalMaterial({
-    color: 0xffffff,
-    roughness: 0.3,
-    metalness: 0.15,
-    transmission: 0.3,
-    transparent: true,
-    opacity: 0.18,
-    thickness: 0.5,
-  });
-  const shell = new THREE.Mesh(shellGeometry, shellMaterial);
+  // Transparent shell
+  const shell = new THREE.Mesh(
+    new THREE.SphereGeometry(2.85, 24, 24),
+    new THREE.MeshPhysicalMaterial({
+      color: 0xffffff, roughness: 0.3, metalness: 0.15,
+      transmission: 0.3, transparent: true, opacity: 0.18, thickness: 0.5,
+    }),
+  );
   cageGroup.add(shell);
 
-  const cageGeometry = new THREE.SphereGeometry(3, 18, 18);
-  const cageMaterial = new THREE.MeshBasicMaterial({
-    color: 0xc1c8c2,
-    wireframe: true,
-    transparent: true,
-    opacity: 0.4,
-  });
-  const cage = new THREE.Mesh(cageGeometry, cageMaterial);
-  cageGroup.add(cage);
+  // Wireframe cage
+  cageGroup.add(new THREE.Mesh(
+    new THREE.SphereGeometry(2.9, 16, 16),
+    new THREE.MeshBasicMaterial({ color: 0xc1c8c2, wireframe: true, transparent: true, opacity: 0.4 }),
+  ));
 
-  const axleGeometry = new THREE.TorusGeometry(3.3, 0.05, 12, 80);
-  const axleMaterial = new THREE.MeshStandardMaterial({
-    color: 0x755844,
-    roughness: 0.5,
-    metalness: 0.55,
-  });
-  const axle = new THREE.Mesh(axleGeometry, axleMaterial);
+  // Axle ring
+  const axle = new THREE.Mesh(
+    new THREE.TorusGeometry(3.1, 0.05, 10, 64),
+    new THREE.MeshStandardMaterial({ color: 0x755844, roughness: 0.5, metalness: 0.55 }),
+  );
   axle.rotation.x = Math.PI / 2;
   cageGroup.add(axle);
 
-  const ballGeometry = new THREE.SphereGeometry(BALL_RADIUS, 18, 18);
+  // Balls — use lower-poly geometry for performance
+  const ballGeometry = new THREE.SphereGeometry(BALL_RADIUS, 12, 12);
   const balls = [];
 
-  for (let index = 0; index < 75; index += 1) {
-    const hueOffset = (index % 15) / 15;
-    const ballMaterial = new THREE.MeshStandardMaterial({
-      color: new THREE.Color().setHSL(0.38 + hueOffset * 0.04, 0.28, 0.66),
-      roughness: 0.35,
-      metalness: 0.08,
+  for (let i = 0; i < MAX_BALLS; i++) {
+    const hue = 0.38 + (i % 15) / 15 * 0.04;
+    const mat = new THREE.MeshStandardMaterial({
+      color: new THREE.Color().setHSL(hue, 0.28, 0.66),
+      roughness: 0.35, metalness: 0.08,
     });
-
-    const ball = new THREE.Mesh(ballGeometry, ballMaterial);
-    // Start within a tighter radius so balls settle to the bottom quickly
-    ball.position.copy(randomPointInSphere(2.1));
-    // Slight downward bias so they pool at the bottom in idle state
+    const ball = new THREE.Mesh(ballGeometry, mat);
+    ball.position.copy(randomPointInSphere(2.0));
     ball.userData.velocity = new THREE.Vector3(
-      (Math.random() - 0.5) * 0.012,
-      -Math.random() * 0.018,
-      (Math.random() - 0.5) * 0.012,
+      (Math.random() - 0.5) * 0.005,
+      -Math.random() * 0.01,
+      (Math.random() - 0.5) * 0.005,
     );
     scene.add(ball);
     balls.push(ball);
@@ -104,19 +91,17 @@ export function createCageScene(container) {
 
   camera.position.set(0, 0.4, 8.2);
 
-  // \u2500\u2500 Animation state \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-  let cageAngVelX = 0.0028;   // current cage angular velocity (rad / normalised frame)
-  let cageAngVelY = 0.0032;
+  // Animation state
+  let cageAngVelX = 0.002;
+  let cageAngVelY = 0.0025;
   let rollingUntil = 0;
   let disposed = false;
   let lastTimestamp = 0;
 
-  // Pre-allocated scratch vectors — avoids per-frame GC pressure
-  const _tmpDelta  = new THREE.Vector3();
-  const _tmpNormal = new THREE.Vector3();
-  const _tmpTangent = new THREE.Vector3();
+  const _delta = new THREE.Vector3();
+  const _normal = new THREE.Vector3();
+  const _tangent = new THREE.Vector3();
 
-  // \u2500\u2500 Public API \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
   function roll(duration = 3000) {
     rollingUntil = performance.now() + duration;
   }
@@ -125,73 +110,69 @@ export function createCageScene(container) {
     return performance.now() < rollingUntil;
   }
 
-  // \u2500\u2500 Per-ball physics \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-  function updateBallMotion(ball, dt, cageSpinRate, rolling) {
+  function updateBall(ball, dtMs, cageSpinRate, rolling) {
     const vel = ball.userData.velocity;
     const pos = ball.position;
 
-    // Gravity — world-space downward pull
-    vel.y -= GRAVITY * dt;
+    // Gravity in world-space Y
+    vel.y -= GRAVITY * dtMs;
 
-    // Damping — very light during roll so energy can build, lossy at idle
-    const damp = rolling ? Math.pow(0.997, dt) : Math.pow(0.965, dt);
+    // Linear damping
+    const damp = Math.pow(LINEAR_DAMPING, dtMs);
     vel.multiplyScalar(damp);
 
-    // Cage-driven vortex: spinning walls drag balls tangentially and lift them.
-    // Force scales with cage angular velocity; must be large enough to overcome
-    // gravity and produce visible tumbling at the target rolling speed (~0.026 rad/frame).
+    // Cage-driven tangential force when spinning
     if (cageSpinRate > 0.002) {
-      // Tangent around Y-axis at ball's XZ position
-      _tmpTangent.set(-pos.z, 0, pos.x).normalize();
-      vel.addScaledVector(_tmpTangent, cageSpinRate * 0.12 * dt);
-      vel.y += cageSpinRate * 0.06 * dt; // upward stir — partially cancels gravity
+      _tangent.set(-pos.z, 0, pos.x).normalize();
+      const force = cageSpinRate * 0.35 * dtMs;
+      vel.addScaledVector(_tangent, force);
+      // Lift to counteract gravity partially during roll
+      if (rolling) vel.y += cageSpinRate * 0.15 * dtMs;
     }
 
-    // Integrate position
-    pos.addScaledVector(vel, dt);
+    // Integrate
+    pos.x += vel.x * dtMs;
+    pos.y += vel.y * dtMs;
+    pos.z += vel.z * dtMs;
 
-    // Cage wall collision
+    // Cage wall constraint
     const r = pos.length();
     if (r > CAGE_INNER_RADIUS) {
-      _tmpNormal.copy(pos).normalize();
-      const normalSpeed = vel.dot(_tmpNormal);
-      if (normalSpeed > 0) {
-        vel.addScaledVector(_tmpNormal, -normalSpeed * (1 + WALL_RESTITUTION));
+      _normal.copy(pos).divideScalar(r);
+      const vn = vel.dot(_normal);
+      if (vn > 0) {
+        vel.addScaledVector(_normal, -vn * (1 + WALL_RESTITUTION));
       }
-      pos.copy(_tmpNormal).multiplyScalar(CAGE_INNER_RADIUS);
+      pos.copy(_normal).multiplyScalar(CAGE_INNER_RADIUS);
     }
   }
 
-  // O(n\u00b2) sphere-sphere collision — ~2775 pairs for 75 balls, well within 60 fps budget
-  function resolveBallCollisions() {
+  function resolveCollisions() {
     for (let i = 0; i < balls.length; i++) {
       for (let j = i + 1; j < balls.length; j++) {
-        _tmpDelta.subVectors(balls[j].position, balls[i].position);
-        const dist = _tmpDelta.length();
+        _delta.subVectors(balls[j].position, balls[i].position);
+        const dist = _delta.length();
+        if (dist < 0.0001 || dist >= CONTACT_DIST) continue;
 
-        if (dist > 0.0001 && dist < CONTACT_DIST) {
-          const overlap = CONTACT_DIST - dist;
-          _tmpNormal.copy(_tmpDelta).divideScalar(dist);
+        const overlap = CONTACT_DIST - dist;
+        _normal.copy(_delta).divideScalar(dist);
 
-          // Push ball centres apart equally
-          balls[i].position.addScaledVector(_tmpNormal, -overlap * 0.5);
-          balls[j].position.addScaledVector(_tmpNormal,  overlap * 0.5);
+        // Separate
+        balls[i].position.addScaledVector(_normal, -overlap * 0.5);
+        balls[j].position.addScaledVector(_normal, overlap * 0.5);
 
-          // Exchange velocity along the collision axis
-          const velI = balls[i].userData.velocity.dot(_tmpNormal);
-          const velJ = balls[j].userData.velocity.dot(_tmpNormal);
-          const relVel = velI - velJ;
-          if (relVel > 0) {
-            const impulse = relVel * (1 + BALL_RESTITUTION) * 0.5;
-            balls[i].userData.velocity.addScaledVector(_tmpNormal, -impulse);
-            balls[j].userData.velocity.addScaledVector(_tmpNormal,  impulse);
-          }
+        // Impulse
+        const vi = balls[i].userData.velocity.dot(_normal);
+        const vj = balls[j].userData.velocity.dot(_normal);
+        if (vi - vj > 0) {
+          const impulse = (vi - vj) * (1 + BALL_RESTITUTION) * 0.5;
+          balls[i].userData.velocity.addScaledVector(_normal, -impulse);
+          balls[j].userData.velocity.addScaledVector(_normal, impulse);
         }
       }
     }
   }
 
-  // \u2500\u2500 Resize handler \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
   function resize() {
     camera.aspect = container.clientWidth / container.clientHeight;
     camera.updateProjectionMatrix();
@@ -199,37 +180,37 @@ export function createCageScene(container) {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   }
 
-  // \u2500\u2500 Render loop \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
   function animate(timestamp) {
-    if (disposed) {
-      return;
-    }
-
+    if (disposed) return;
     requestAnimationFrame(animate);
 
-    // Normalised delta-time (1.0 = 60 fps frame). Cap at 3\u00d7 to prevent tunnelling on tab resume.
     const rawDt = lastTimestamp > 0 ? timestamp - lastTimestamp : 16.67;
-    const dt = Math.min(rawDt / 16.67, 3);
+    const dtMs = Math.min(rawDt, 50); // cap to avoid tunnelling
+    const dt = dtMs / 16.67; // normalised for cage rotation lerp
     lastTimestamp = timestamp;
 
     const rolling = isRolling();
 
-    // Smooth cage rotation — accelerate into roll, ease back to idle drift
-    const targetAngVelX = rolling ? 0.022 : 0.0028;
-    const targetAngVelY = rolling ? 0.026 : 0.0032;
-    const lerpRate = 0.04;
-    cageAngVelX += (targetAngVelX - cageAngVelX) * lerpRate * dt;
-    cageAngVelY += (targetAngVelY - cageAngVelY) * lerpRate * dt;
+    // Cage rotation — smooth acceleration/deceleration
+    const targetX = rolling ? 0.02 : 0.002;
+    const targetY = rolling ? 0.025 : 0.0025;
+    const lerp = 0.04;
+    cageAngVelX += (targetX - cageAngVelX) * lerp * dt;
+    cageAngVelY += (targetY - cageAngVelY) * lerp * dt;
 
     cageGroup.rotation.x += cageAngVelX * dt;
     cageGroup.rotation.y += cageAngVelY * dt;
-    cageGroup.rotation.z = Math.sin(timestamp * 0.00025) * 0.08;
+    cageGroup.rotation.z = Math.sin(timestamp * 0.00025) * 0.06;
 
-    // Ball physics — run after cage rotation so cageAngVelY is up-to-date
-    for (const ball of balls) {
-      updateBallMotion(ball, dt, cageAngVelY, rolling);
+    // Physics substep — use dtMs for real-time physics
+    const substeps = dtMs > 30 ? 2 : 1;
+    const subDt = dtMs / substeps;
+    for (let s = 0; s < substeps; s++) {
+      for (const ball of balls) {
+        updateBall(ball, subDt, cageAngVelY, rolling);
+      }
+      resolveCollisions();
     }
-    resolveBallCollisions();
 
     renderer.render(scene, camera);
   }
